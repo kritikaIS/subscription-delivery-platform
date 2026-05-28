@@ -32,6 +32,7 @@ public class DeliveryService {
     private final OrderRepository orderRepository;
     private final DeliveryRecordRepository deliveryRecordRepository;
     private final WalletLedgerRepository walletLedgerRepository;
+    private final AuditLogService auditLogService;
 
     /**
      * Marks a LOCKED order as DELIVERED.
@@ -113,7 +114,11 @@ public class DeliveryService {
         ledgerEntry.setCreatedByUserId(adminId);
         walletLedgerRepository.save(ledgerEntry);
 
-        // TODO: Audit log — action_type: ORDER_DELIVERED, acting_admin: adminId
+        // Audit log — action_type: ORDER_OVERRIDE (BR-AUD-01)
+        auditLogService.log("ORDER_OVERRIDE", "order", orderId.toString(),
+                java.util.Map.of("status", "LOCKED"),
+                java.util.Map.of("status", "DELIVERED", "amountDeductedPaise", order.getTotalAmountPaise()),
+                adminId);
 
         return MarkDeliveredResponse.builder()
                 .orderId(order.getId())
@@ -181,7 +186,11 @@ public class DeliveryService {
         record.setSkipReason(skipReason);
         deliveryRecordRepository.save(record);
 
-        // TODO: Audit log — action_type: ORDER_SKIPPED, acting_admin: adminId
+        // Audit log — action_type: MANUAL_STATUS_CORRECTION (BR-AUD-01)
+        auditLogService.log("MANUAL_STATUS_CORRECTION", "order", orderId.toString(),
+                java.util.Map.of("status", "LOCKED"),
+                java.util.Map.of("status", "SKIPPED", "skipReason", skipReason.name()),
+                adminId);
 
         return MarkSkippedResponse.builder()
                 .orderId(order.getId())

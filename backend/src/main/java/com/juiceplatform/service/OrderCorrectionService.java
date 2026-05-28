@@ -38,6 +38,7 @@ public class OrderCorrectionService {
     private final OrderRepository orderRepository;
     private final DeliveryRecordRepository deliveryRecordRepository;
     private final WalletLedgerRepository walletLedgerRepository;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public OrderCorrectionResponse correctOrder(UUID orderId, OrderCorrectionRequest request, UUID adminId) {
@@ -73,7 +74,11 @@ public class OrderCorrectionService {
                     HttpStatus.CONFLICT);
         }
 
-        // TODO: Audit log — action_type: HISTORICAL_ORDER_EDIT, old_value/new_value snapshots, acting_admin: adminId
+        // Audit log — action_type: HISTORICAL_ORDER_EDIT (BR-AUD-01, BR-HIS-01)
+        auditLogService.log("HISTORICAL_ORDER_EDIT", "order", orderId.toString(),
+                java.util.Map.of("status", currentStatus.name()),
+                java.util.Map.of("status", order.getStatus().name(), "autoRefundIssued", autoRefundIssued),
+                adminId, request.getNotes());
 
         return OrderCorrectionResponse.builder()
                 .orderId(order.getId())

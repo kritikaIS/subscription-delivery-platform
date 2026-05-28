@@ -51,7 +51,6 @@ public class SecurityConfig {
 
                         // Admin endpoints — require ADMIN role
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-
                         // Customer business endpoints — require CUSTOMER role
                         .requestMatchers("/api/v1/onboarding").hasRole("CUSTOMER")
                         .requestMatchers("/api/v1/onboarding/**").hasRole("CUSTOMER")

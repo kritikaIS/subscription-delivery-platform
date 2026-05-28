@@ -26,6 +26,7 @@ public class WalletServiceImpl implements WalletService {
 
     private final WalletLedgerRepository walletLedgerRepository;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
     @Override
     @Transactional(readOnly = true)
@@ -84,7 +85,13 @@ public class WalletServiceImpl implements WalletService {
         entry.setCreatedByUserId(adminId);
         entry = walletLedgerRepository.save(entry);
 
-        // TODO: Audit log — action_type: BALANCE_CREDIT, target_entity: customer, acting_admin: adminId
+        // Audit log — action_type: BALANCE_CREDIT (BR-AUD-01)
+        auditLogService.log("BALANCE_CREDIT", "customer", customerId.toString(),
+                null,
+                java.util.Map.of("amountPaise", request.getAmountPaise(),
+                        "newBalancePaise", newBalance,
+                        "ledgerEntryId", entry.getId().toString()),
+                adminId, request.getNotes());
 
         return AdminCreditResponse.builder()
                 .ledgerEntryId(entry.getId())
@@ -98,7 +105,6 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public long getCurrentBalance(UUID customerId) {
         // Balance = running_balance_paise of the latest ledger row (BR-WAL-02)
         // Customers with no entries have balance = 0 (BR-WAL-13)

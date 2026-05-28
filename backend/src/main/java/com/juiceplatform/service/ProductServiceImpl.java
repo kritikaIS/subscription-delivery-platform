@@ -27,6 +27,7 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductPriceHistoryRepository productPriceHistoryRepository;
+    private final AuditLogService auditLogService;
 
     @Override
     @Transactional(readOnly = true)
@@ -52,8 +53,11 @@ public class ProductServiceImpl implements ProductService {
         Product product = ProductMapper.toEntity(request);
         product = productRepository.save(product);
 
-        // TODO: Audit log — action_type: PRODUCT_CREATE, target_entity: product, acting_admin: adminId
-        // TODO: old_value: null, new_value: product snapshot JSONB
+        // Audit log — action_type: PRODUCT_CREATE (BR-AUD-01)
+        auditLogService.log("PRODUCT_CREATE", "product", product.getId().toString(),
+                null,
+                java.util.Map.of("name", product.getName(), "pricePerUnitPaise", product.getPricePerUnitPaise()),
+                adminId);
 
         return ProductMapper.toProductResponse(product);
     }
@@ -79,11 +83,17 @@ public class ProductServiceImpl implements ProductService {
             priceHistory.setChangedBy(adminId);
             productPriceHistoryRepository.save(priceHistory);
 
-            // TODO: Audit log — action_type: PRODUCT_PRICE_UPDATE, target_entity: product, acting_admin: adminId
+            // Audit log — action_type: PRODUCT_PRICE_UPDATE (BR-AUD-01)
+            auditLogService.log("PRODUCT_PRICE_UPDATE", "product", productId.toString(),
+                    java.util.Map.of("pricePerUnitPaise", oldPrice),
+                    java.util.Map.of("pricePerUnitPaise", request.getPricePerUnitPaise()),
+                    adminId);
         }
 
-        // TODO: Audit log — action_type: PRODUCT_UPDATE, target_entity: product, acting_admin: adminId
-        // TODO: old_value / new_value JSONB snapshots
+        // Audit log — action_type: PRODUCT_UPDATE (BR-AUD-01)
+        auditLogService.log("PRODUCT_UPDATE", "product", productId.toString(),
+                null, java.util.Map.of("updatedAt", product.getUpdatedAt().toString()),
+                adminId);
 
         return ProductMapper.toUpdateProductResponse(product);
     }
@@ -107,9 +117,12 @@ public class ProductServiceImpl implements ProductService {
         //       Return actual count of paused subscriptions
         int autoPausedSubscriptionCount = 0;
 
-        // TODO: Audit log — action_type: PRODUCT_DISABLE, target_entity: product, acting_admin: adminId
+        // Audit log — action_type: PRODUCT_DISABLE (BR-AUD-01)
+        auditLogService.log("PRODUCT_DISABLE", "product", productId.toString(),
+                java.util.Map.of("isAvailable", true),
+                java.util.Map.of("isAvailable", false),
+                adminId);
         // TODO: Notify admin and affected customers (BR-PRD-03, BR-NOT-01)
-        //       Notifications must be sent AFTER transaction commit (BR-NOT-01)
 
         return ProductMapper.toDisableProductResponse(product, autoPausedSubscriptionCount);
     }
@@ -130,7 +143,11 @@ public class ProductServiceImpl implements ProductService {
 
         // NOTE: Previously auto-paused subscriptions are NOT automatically resumed (BR-PRD-04)
 
-        // TODO: Audit log — action_type: PRODUCT_ENABLE, target_entity: product, acting_admin: adminId
+        // Audit log — action_type: PRODUCT_ENABLE (BR-AUD-01)
+        auditLogService.log("PRODUCT_ENABLE", "product", productId.toString(),
+                java.util.Map.of("isAvailable", false),
+                java.util.Map.of("isAvailable", true),
+                adminId);
 
         return ProductMapper.toEnableProductResponse(product);
     }
