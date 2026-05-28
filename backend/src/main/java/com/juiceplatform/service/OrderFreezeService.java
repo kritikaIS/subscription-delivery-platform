@@ -28,7 +28,7 @@ public class OrderFreezeService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderFreezeService.class);
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final String JOB_NAME = "OrderFreezeJob";
+    public static final String JOB_NAME = "OrderFreezeJob";
 
     private final OrderRepository orderRepository;
     private final DeliveryRecordRepository deliveryRecordRepository;

@@ -2,6 +2,7 @@ package com.juiceplatform.scheduler;
 
 import com.juiceplatform.entity.DeliverySheetSnapshot;
 import com.juiceplatform.service.DeliverySheetService;
+import com.juiceplatform.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,10 @@ public class DeliverySheetScheduler {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final DeliverySheetService deliverySheetService;
+    private final NotificationService notificationService;
+
+    // Job name constant for use in recovery and notifications
+    static final String JOB_NAME = "DeliverySheetGenerationJob";
 
     @Scheduled(cron = "${scheduler.delivery-sheet.cron:0 10 22 * * *}", zone = "Asia/Kolkata")
     public void runDeliverySheetGeneration() {
@@ -33,8 +38,15 @@ public class DeliverySheetScheduler {
         try {
             deliverySheetService.generateSnapshot(deliveryDate,
                     DeliverySheetSnapshot.GeneratedBySource.SCHEDULER, null);
+            log.info("DeliverySheetGenerationJob completed for {}", deliveryDate);
         } catch (Exception e) {
             log.error("DeliverySheetGenerationJob failed for {}: {}", deliveryDate, e.getMessage(), e);
+            // Best-effort notification — non-blocking (BR-NOT-01, BR-NOT-03, BR-SCH-06)
+            try {
+                notificationService.notifySchedulerJobFailure(JOB_NAME, deliveryDate, e.getMessage());
+            } catch (Exception notifyEx) {
+                log.warn("Failed to send scheduler failure notification: {}", notifyEx.getMessage());
+            }
         }
     }
 }

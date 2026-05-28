@@ -1,5 +1,6 @@
 package com.juiceplatform.scheduler;
 
+import com.juiceplatform.service.NotificationService;
 import com.juiceplatform.service.OrderFreezeService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -23,10 +24,10 @@ public class OrderFreezeScheduler {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final OrderFreezeService orderFreezeService;
+    private final NotificationService notificationService;
 
     @Scheduled(cron = "${scheduler.order-freeze.cron:0 0 22 * * *}", zone = "Asia/Kolkata")
     public void runOrderFreeze() {
-        // Freeze orders for tomorrow's delivery date
         LocalDate deliveryDate = LocalDate.now(IST).plusDays(1);
         log.info("Scheduled OrderFreezeJob triggered for delivery date: {}", deliveryDate);
 
@@ -36,6 +37,13 @@ public class OrderFreezeScheduler {
                     result.deliveryDate(), result.ordersLocked(), result.duplicatesSkipped());
         } catch (Exception e) {
             log.error("OrderFreezeJob failed for delivery date {}: {}", deliveryDate, e.getMessage(), e);
+            // Best-effort notification — non-blocking (BR-NOT-01, BR-NOT-03, BR-SCH-06)
+            try {
+                notificationService.notifySchedulerJobFailure(
+                        OrderFreezeService.JOB_NAME, deliveryDate, e.getMessage());
+            } catch (Exception notifyEx) {
+                log.warn("Failed to send scheduler failure notification: {}", notifyEx.getMessage());
+            }
         }
     }
 }
