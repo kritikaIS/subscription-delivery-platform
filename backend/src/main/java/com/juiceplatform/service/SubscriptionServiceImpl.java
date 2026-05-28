@@ -5,10 +5,12 @@ import com.juiceplatform.dto.subscription.CreateSubscriptionRequest;
 import com.juiceplatform.dto.subscription.PauseSubscriptionResponse;
 import com.juiceplatform.dto.subscription.ResumeSubscriptionResponse;
 import com.juiceplatform.dto.subscription.SubscriptionResponse;
+import com.juiceplatform.entity.Order;
 import com.juiceplatform.entity.Product;
 import com.juiceplatform.entity.Subscription;
 import com.juiceplatform.entity.User;
 import com.juiceplatform.exception.BusinessException;
+import com.juiceplatform.repository.OrderRepository;
 import com.juiceplatform.repository.ProductRepository;
 import com.juiceplatform.repository.SubscriptionRepository;
 import com.juiceplatform.repository.UserRepository;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -35,6 +38,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final OrderRepository orderRepository;
 
     @Override
     @Transactional
@@ -122,8 +126,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscription.setPauseReason(Subscription.PauseReason.USER_PAUSED);
         subscriptionRepository.save(subscription);
 
-        // TODO: Cancel future SCHEDULED orders from effectiveDate onward (BR-PAU-01)
-        // TODO: This requires the orders module which is not yet implemented
+        // Cancel future SCHEDULED orders from effectiveDate onward (BR-PAU-01)
+        // LOCKED orders are unaffected
+        cancelScheduledOrdersFrom(subscription.getId(), effectiveDate);
 
         return PauseSubscriptionResponse.builder()
                 .subscriptionId(subscription.getId())
@@ -174,8 +179,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscription.setPauseReason(null);
         subscriptionRepository.save(subscription);
 
-        // TODO: Cancel future SCHEDULED orders from effectiveDate onward (BR-CAN-01)
-        // TODO: This requires the orders module which is not yet implemented
+        // Cancel future SCHEDULED orders from effectiveDate onward (BR-CAN-01)
+        // LOCKED orders are unaffected
+        cancelScheduledOrdersFrom(subscription.getId(), effectiveDate);
 
         return CancelSubscriptionResponse.builder()
                 .subscriptionId(subscription.getId())
@@ -187,10 +193,24 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     // --- Private helpers ---
 
+    private void cancelScheduledOrdersFrom(UUID subscriptionId, LocalDate fromDate) {
+        List<Order> scheduledOrders = orderRepository
+                .findBySubscriptionIdAndStatusAndDeliveryDateGreaterThanEqual(
+                        subscriptionId, Order.OrderStatus.SCHEDULED, fromDate);
+        for (Order order : scheduledOrders) {
+            order.setStatus(Order.OrderStatus.CANCELLED);
+            orderRepository.save(order);
+        }
+    }
+
     private User requireOnboardedCustomer(UUID customerId) {
         User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + customerId));
 
+        if (!customer.getIsActive()) {
+            throw new BusinessException("ACCOUNT_DEACTIVATED",
+                    "Account is deactivated", HttpStatus.FORBIDDEN);
+        }
         if (!customer.getOnboardingCompleted()) {
             throw new BusinessException("ONBOARDING_INCOMPLETE",
                     "Customer has not completed onboarding", HttpStatus.FORBIDDEN);

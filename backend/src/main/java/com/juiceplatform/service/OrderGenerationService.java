@@ -4,10 +4,12 @@ import com.juiceplatform.entity.DeliveryAddress;
 import com.juiceplatform.entity.Order;
 import com.juiceplatform.entity.Product;
 import com.juiceplatform.entity.Subscription;
+import com.juiceplatform.entity.WalletLedger;
 import com.juiceplatform.repository.DeliveryAddressRepository;
 import com.juiceplatform.repository.OrderRepository;
 import com.juiceplatform.repository.ProductRepository;
 import com.juiceplatform.repository.SubscriptionRepository;
+import com.juiceplatform.repository.WalletLedgerRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ public class OrderGenerationService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final DeliveryAddressRepository deliveryAddressRepository;
+    private final WalletLedgerRepository walletLedgerRepository;
 
     @Transactional
     public OrderGenerationResult generateOrdersForDate(LocalDate deliveryDate) {
@@ -66,6 +69,21 @@ public class OrderGenerationService {
                 continue;
             }
 
+            long orderCost = product.getPricePerUnitPaise() * subscription.getQuantity();
+
+            // Wallet balance check (BR-WAL-10 / BR-ORD-05)
+            long walletBalance = walletLedgerRepository
+                    .findTopByCustomerIdOrderByCreatedAtDesc(subscription.getCustomerId())
+                    .map(WalletLedger::getRunningBalancePaise)
+                    .orElse(0L);
+
+            if (walletBalance < orderCost) {
+                log.warn("Skipping subscription {} — insufficient wallet balance ({} < {})",
+                        subscription.getId(), walletBalance, orderCost);
+                // TODO: Notify customer and admin (BR-NOT-02, BR-NOT-03)
+                continue;
+            }
+
             // Create order with snapshots
             Order order = new Order();
             order.setCustomerId(subscription.getCustomerId());
@@ -80,7 +98,7 @@ public class OrderGenerationService {
             order.setDeliveryDate(deliveryDate);
             order.setQuantity(subscription.getQuantity());
             order.setUnitPricePaise(product.getPricePerUnitPaise());
-            order.setTotalAmountPaise(product.getPricePerUnitPaise() * subscription.getQuantity());
+            order.setTotalAmountPaise(orderCost);
             order.setStatus(Order.OrderStatus.SCHEDULED);
             order.setIdempotencyKey(idempotencyKey);
 

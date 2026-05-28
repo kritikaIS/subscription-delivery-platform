@@ -6,12 +6,14 @@ import com.juiceplatform.dto.common.PaginationMeta;
 import com.juiceplatform.dto.order.OrderListResponse;
 import com.juiceplatform.entity.Order;
 import com.juiceplatform.entity.Product;
+import com.juiceplatform.exception.BusinessException;
 import com.juiceplatform.repository.OrderRepository;
 import com.juiceplatform.repository.ProductRepository;
 import com.juiceplatform.security.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,7 +38,13 @@ public class OrderController {
 
         Page<Order> page;
         if (status != null && !status.isBlank()) {
-            Order.OrderStatus orderStatus = Order.OrderStatus.valueOf(status.toUpperCase());
+            Order.OrderStatus orderStatus;
+            try {
+                orderStatus = Order.OrderStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("INVALID_STATUS",
+                        "Invalid order status: " + status, HttpStatus.BAD_REQUEST);
+            }
             page = orderRepository.findByCustomerIdAndStatusOrderByDeliveryDateDesc(
                     authenticatedUser.getUserId(), orderStatus, pageable);
         } else {
@@ -57,9 +65,7 @@ public class OrderController {
                     .totalAmountPaise(order.getTotalAmountPaise())
                     .deliveryDate(order.getDeliveryDate())
                     .status(order.getStatus().name())
-                    .isLocked(order.getStatus() == Order.OrderStatus.LOCKED
-                            || order.getStatus() == Order.OrderStatus.DELIVERED
-                            || order.getStatus() == Order.OrderStatus.SKIPPED)
+                    .isLocked(order.getStatus() == Order.OrderStatus.LOCKED)
                     .build();
         });
 

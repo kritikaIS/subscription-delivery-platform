@@ -65,7 +65,12 @@ public class AuthServiceImpl implements AuthService {
         User customer = userRepository.findByGoogleId(googleId)
                 .orElseGet(() -> createCustomerUser(googleId, email, name));
 
-        // 3. Revoke all existing refresh tokens (BR-AUTH-04: single session)
+        // 3. Check account is active (BR-ACC-02)
+        if (!customer.getIsActive()) {
+            throw new AuthenticationFailedException("Account is deactivated");
+        }
+
+        // 4. Revoke all existing refresh tokens (BR-AUTH-04: single session)
         refreshTokenRepository.revokeAllByUserId(customer.getId());
 
         // 4. Generate tokens
@@ -144,7 +149,12 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(storedToken.getUserId())
                 .orElseThrow(() -> new AuthenticationFailedException("User not found"));
 
-        // 5. Generate new token pair
+        // 5. Check account is still active
+        if (!user.getIsActive()) {
+            throw new AuthenticationFailedException("Account is deactivated");
+        }
+
+        // 6. Generate new token pair
         String accessToken = jwtService.generateAccessToken(user.getId(), user.getRole().name(), user.getPhone());
         String newRawRefreshToken = generateSecureToken();
 
