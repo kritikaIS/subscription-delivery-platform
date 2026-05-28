@@ -97,6 +97,18 @@ public class TestDataFactory {
         return subscriptionRepository.save(sub);
     }
 
+    public Subscription createPendingStartSubscription(UUID customerId, UUID productId, int quantity) {
+        Subscription sub = new Subscription();
+        sub.setCustomerId(customerId);
+        sub.setProductId(productId);
+        sub.setQuantity(quantity);
+        // start_date = today so activateEligibleSubscriptions() (start_date <= today) picks it up
+        sub.setStartDate(LocalDate.now());
+        sub.setStatus(Subscription.SubscriptionStatus.PENDING_START);
+        sub.setCreatedBy(customerId);
+        return subscriptionRepository.save(sub);
+    }
+
     public Order createLockedOrder(UUID customerId, UUID subscriptionId, UUID productId,
                                    long unitPricePaise, int quantity, LocalDate deliveryDate) {
         Order order = new Order();

@@ -75,8 +75,9 @@ public class DeliveryService {
                     "Order must be in LOCKED state to mark as delivered", HttpStatus.CONFLICT);
         }
 
-        // Check wallet balance (BR-DEL-04 — insufficient balance is an unexpected inconsistency)
-        long currentBalance = walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(order.getCustomerId())
+        // Check wallet balance — acquire pessimistic write lock on latest ledger row
+        // to prevent concurrent delivery confirmations from computing the same balance (db-schema §6.1)
+        long currentBalance = walletLedgerRepository.findTopByCustomerIdForUpdate(order.getCustomerId())
                 .map(WalletLedger::getRunningBalancePaise)
                 .orElse(0L);
 

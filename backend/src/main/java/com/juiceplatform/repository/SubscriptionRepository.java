@@ -27,4 +27,11 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
 
     List<Subscription> findAllByStatusAndStartDateLessThanEqual(
             Subscription.SubscriptionStatus status, java.time.LocalDate date);
+
+    /**
+     * Finds all ACTIVE and PENDING_START subscriptions for a given product.
+     * Used by product-disable auto-pause logic (BR-PRD-03).
+     */
+    List<Subscription> findAllByProductIdAndStatusIn(
+            UUID productId, List<Subscription.SubscriptionStatus> statuses);
 }

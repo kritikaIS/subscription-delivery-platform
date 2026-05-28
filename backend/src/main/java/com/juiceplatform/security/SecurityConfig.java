@@ -1,6 +1,7 @@
 package com.juiceplatform.security;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,6 +26,15 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
     private final CustomAccessDeniedHandler accessDeniedHandler;
 
+    /**
+     * Comma-separated list of allowed CORS origins.
+     * Set via app.cors.allowed-origins in application.properties or
+     * APP_CORS_ALLOWED_ORIGINS environment variable.
+     * Example production value: https://app.juiceplatform.com
+     */
+    @Value("${app.cors.allowed-origins}")
+    private List<String> allowedOrigins;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -38,6 +48,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints — no authentication required
                         .requestMatchers(
+                                "/health",
                                 "/api/v1/health",
                                 "/api/v1/auth/**",
                                 "/api/v1/dev/**",
@@ -78,11 +89,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // TODO: Restrict origins to actual frontend domains in production
-        configuration.setAllowedOrigins(List.of("*"));
+        // Origins are loaded from app.cors.allowed-origins — never wildcard in production.
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));
+        // Credentials must be allowed when origins are explicit (not wildcard)
+        configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -111,7 +111,10 @@ public class OrderCorrectionService {
         boolean isSystemError = Boolean.TRUE.equals(request.getIsSystemError());
         if (isSystemError) {
             // Auto-refund: reverse the original wallet deduction (BR-HIS-02)
-            long currentBalance = getCurrentBalance(order.getCustomerId());
+            // Acquire pessimistic write lock before reading balance (db-schema §6.1)
+            long currentBalance = walletLedgerRepository.findTopByCustomerIdForUpdate(order.getCustomerId())
+                    .map(WalletLedger::getRunningBalancePaise)
+                    .orElse(0L);
             long newBalance = currentBalance + order.getTotalAmountPaise();
 
             WalletLedger refundEntry = new WalletLedger();
@@ -148,7 +151,10 @@ public class OrderCorrectionService {
         deliveryRecordRepository.save(record);
 
         // Insert DEBIT — negative balance permitted (BR-HIS-03, no balance check)
-        long currentBalance = getCurrentBalance(order.getCustomerId());
+        // Acquire pessimistic write lock before reading balance (db-schema §6.1)
+        long currentBalance = walletLedgerRepository.findTopByCustomerIdForUpdate(order.getCustomerId())
+                .map(WalletLedger::getRunningBalancePaise)
+                .orElse(0L);
         long newBalance = currentBalance - order.getTotalAmountPaise();
 
         WalletLedger debitEntry = new WalletLedger();
@@ -205,11 +211,5 @@ public class OrderCorrectionService {
         return deliveryRecordRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException("RESOURCE_NOT_FOUND",
                         "Delivery record not found for order: " + orderId, HttpStatus.NOT_FOUND));
-    }
-
-    private long getCurrentBalance(UUID customerId) {
-        return walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(customerId)
-                .map(WalletLedger::getRunningBalancePaise)
-                .orElse(0L);
     }
 }

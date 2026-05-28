@@ -80,6 +80,16 @@ public class OrderFreezeService {
                 ordersLocked++;
             }
 
+            // Count already-LOCKED orders for this date that have delivery records.
+            // These were locked by a previous run — they are idempotent duplicates (BR-SCH-02).
+            List<Order> alreadyLockedOrders = orderRepository
+                    .findByDeliveryDateAndStatus(deliveryDate, Order.OrderStatus.LOCKED);
+            for (Order order : alreadyLockedOrders) {
+                if (deliveryRecordRepository.existsByOrderId(order.getId())) {
+                    duplicatesSkipped++;
+                }
+            }
+
             // Mark job COMPLETED
             jobLog.setStatus(SchedulerJobLog.JobStatus.COMPLETED);
             jobLog.setFinishedAt(OffsetDateTime.now(IST));

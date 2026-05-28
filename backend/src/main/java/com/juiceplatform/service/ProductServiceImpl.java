@@ -9,16 +9,21 @@ import com.juiceplatform.dto.product.UpdateProductRequest;
 import com.juiceplatform.dto.product.UpdateProductResponse;
 import com.juiceplatform.entity.Product;
 import com.juiceplatform.entity.ProductPriceHistory;
+import com.juiceplatform.entity.Subscription;
+import com.juiceplatform.entity.User;
 import com.juiceplatform.exception.ProductNotFoundException;
 import com.juiceplatform.mapper.ProductMapper;
 import com.juiceplatform.repository.ProductPriceHistoryRepository;
 import com.juiceplatform.repository.ProductRepository;
+import com.juiceplatform.repository.SubscriptionRepository;
+import com.juiceplatform.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,6 +33,9 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductPriceHistoryRepository productPriceHistoryRepository;
     private final AuditLogService auditLogService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -112,19 +120,54 @@ public class ProductServiceImpl implements ProductService {
         product.setIsAvailable(false);
         product = productRepository.save(product);
 
-        // TODO: Pause all ACTIVE and PENDING_START subscriptions for this product
-        //       with pause_reason = SYSTEM_PAUSED_PRODUCT_DISABLED (BR-PRD-03)
-        //       Return actual count of paused subscriptions
-        int autoPausedSubscriptionCount = 0;
+        // Auto-pause all ACTIVE and PENDING_START subscriptions for this product (BR-PRD-03).
+        // SYSTEM_PAUSED_PRODUCT_DISABLED: existing SCHEDULED orders remain unchanged (BR-PAU-05).
+        List<Subscription> toAutoPause = subscriptionRepository.findAllByProductIdAndStatusIn(
+                productId,
+                List.of(Subscription.SubscriptionStatus.ACTIVE,
+                        Subscription.SubscriptionStatus.PENDING_START));
 
-        // Audit log — action_type: PRODUCT_DISABLE (BR-AUD-01)
+        for (Subscription sub : toAutoPause) {
+            sub.setStatus(Subscription.SubscriptionStatus.PAUSED);
+            sub.setPauseReason(Subscription.PauseReason.SYSTEM_PAUSED_PRODUCT_DISABLED);
+            subscriptionRepository.save(sub);
+
+            // Audit log per auto-paused subscription — acting_admin is the admin who disabled
+            // the product (db-schema §9 inconsistency resolution note).
+            auditLogService.log(
+                    "PRODUCT_DISABLE",
+                    "subscription",
+                    sub.getId().toString(),
+                    java.util.Map.of("status", "ACTIVE_OR_PENDING_START", "pauseReason", "none"),
+                    java.util.Map.of("status", "PAUSED",
+                            "pauseReason", "SYSTEM_PAUSED_PRODUCT_DISABLED",
+                            "productId", productId.toString()),
+                    adminId,
+                    "Auto-paused because product " + productId + " was disabled"
+            );
+        }
+
+        // Audit log for the product disable itself (BR-AUD-01)
         auditLogService.log("PRODUCT_DISABLE", "product", productId.toString(),
                 java.util.Map.of("isAvailable", true),
-                java.util.Map.of("isAvailable", false),
+                java.util.Map.of("isAvailable", false,
+                        "autoPausedSubscriptionCount", toAutoPause.size()),
                 adminId);
-        // TODO: Notify admin and affected customers (BR-PRD-03, BR-NOT-01)
 
-        return ProductMapper.toDisableProductResponse(product, autoPausedSubscriptionCount);
+        // Best-effort notifications after transaction — BR-NOT-01/02/03.
+        // Notifications are sent outside the transaction boundary; failures never roll back state.
+        final Product finalProduct = product;
+        final int pausedCount = toAutoPause.size();
+        for (Subscription sub : toAutoPause) {
+            User customer = userRepository.findById(sub.getCustomerId()).orElse(null);
+            String customerName = customer != null ? customer.getName() : "Unknown";
+            notificationService.notifyProductAutoPause(
+                    sub.getCustomerId(), customerName,
+                    finalProduct.getId(), finalProduct.getName(),
+                    sub.getId());
+        }
+
+        return ProductMapper.toDisableProductResponse(product, pausedCount);
     }
 
     @Override

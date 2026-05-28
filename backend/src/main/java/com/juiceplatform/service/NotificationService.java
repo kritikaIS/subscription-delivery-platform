@@ -103,4 +103,24 @@ public class NotificationService {
                      jobName, e.getMessage());
         }
     }
+
+    /**
+     * Notifies admin and affected customer that a subscription was auto-paused
+     * because its product was disabled.
+     * BR-NOT-02: subscription auto-paused trigger.
+     * BR-NOT-03: product auto-pause event admin trigger.
+     */
+    public void notifyProductAutoPause(UUID customerId, String customerName,
+                                        UUID productId, String productName,
+                                        UUID subscriptionId) {
+        try {
+            log.info("[NOTIFICATION] Subscription auto-paused: Customer {} ({}) subscription {} " +
+                     "paused because product {} ({}) was disabled",
+                     customerId, customerName, subscriptionId, productId, productName);
+            // TODO: Send email to customer and admin when SMTP is configured
+        } catch (Exception e) {
+            log.warn("[NOTIFICATION] Failed to notify product auto-pause for customer {}, subscription {}: {}",
+                     customerId, subscriptionId, e.getMessage());
+        }
+    }
 }

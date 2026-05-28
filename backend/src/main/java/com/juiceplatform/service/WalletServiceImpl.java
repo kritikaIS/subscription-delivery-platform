@@ -70,8 +70,11 @@ public class WalletServiceImpl implements WalletService {
                     "Minimum wallet credit amount is ₹1 (100 paise)", HttpStatus.BAD_REQUEST);
         }
 
-        // Compute new running balance
-        long currentBalance = getCurrentBalance(customerId);
+        // Compute new running balance — acquire pessimistic write lock on latest row
+        // to prevent concurrent credits from computing the same running_balance_paise (db-schema §6.1)
+        long currentBalance = walletLedgerRepository.findTopByCustomerIdForUpdate(customerId)
+                .map(WalletLedger::getRunningBalancePaise)
+                .orElse(0L);
         long newBalance = currentBalance + request.getAmountPaise();
 
         // Insert CREDIT ledger entry (BR-WAL-04)

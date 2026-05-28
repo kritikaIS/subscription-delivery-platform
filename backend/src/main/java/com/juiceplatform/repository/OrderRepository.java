@@ -22,6 +22,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     boolean existsByIdempotencyKey(String idempotencyKey);
 
+    Optional<Order> findByIdempotencyKeyAndStatus(String idempotencyKey, Order.OrderStatus status);
+
     List<Order> findByDeliveryDateAndStatus(LocalDate deliveryDate, Order.OrderStatus status);
 
     List<Order> findBySubscriptionIdAndStatusAndDeliveryDateGreaterThanEqual(
