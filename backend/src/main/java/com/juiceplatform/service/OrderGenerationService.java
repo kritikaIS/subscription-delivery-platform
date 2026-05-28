@@ -31,6 +31,7 @@ public class OrderGenerationService {
     private final DeliveryAddressRepository deliveryAddressRepository;
     private final WalletLedgerRepository walletLedgerRepository;
     private final BusinessHolidayService businessHolidayService;
+    private final NotificationService notificationService;
 
     @Transactional
     public OrderGenerationResult generateOrdersForDate(LocalDate deliveryDate) {
@@ -86,8 +87,16 @@ public class OrderGenerationService {
             if (walletBalance < orderCost) {
                 log.warn("Skipping subscription {} — insufficient wallet balance ({} < {})",
                         subscription.getId(), walletBalance, orderCost);
-                // TODO: Notify customer and admin (BR-NOT-02, BR-NOT-03)
+                // Notify customer and admin — best-effort, after transaction (BR-NOT-01, BR-NOT-02, BR-NOT-03)
+                notificationService.notifyOrderGenerationBlocked(
+                        subscription.getCustomerId(), "Customer", walletBalance, orderCost);
                 continue;
+            }
+
+            // Low balance warning check (BR-WAL-09): balance < ₹200 = 20,000 paise
+            if (walletBalance < 20_000L) {
+                notificationService.notifyLowBalance(
+                        subscription.getCustomerId(), "Customer", walletBalance, 20_000L);
             }
 
             // Create order with snapshots
