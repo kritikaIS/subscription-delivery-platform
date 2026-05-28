@@ -30,9 +30,15 @@ public class OrderGenerationService {
     private final ProductRepository productRepository;
     private final DeliveryAddressRepository deliveryAddressRepository;
     private final WalletLedgerRepository walletLedgerRepository;
+    private final BusinessHolidayService businessHolidayService;
 
     @Transactional
     public OrderGenerationResult generateOrdersForDate(LocalDate deliveryDate) {
+        // Skip order generation for holidays (BR-ORD-03, BR-HOL-02)
+        if (businessHolidayService.isHoliday(deliveryDate)) {
+            log.info("OrderGenerationJob skipped for {} — configured as a business holiday", deliveryDate);
+            return new OrderGenerationResult(deliveryDate, 0, 0, 0);
+        }
         log.info("Starting order generation for delivery date: {}", deliveryDate);
 
         // Find all ACTIVE subscriptions (BR-ORD-02)

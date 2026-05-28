@@ -7,6 +7,8 @@ import com.juiceplatform.entity.User;
 import com.juiceplatform.repository.RefreshTokenRepository;
 import com.juiceplatform.repository.UserRepository;
 import com.juiceplatform.security.JwtService;
+import com.juiceplatform.entity.DeliverySheetSnapshot;
+import com.juiceplatform.service.DeliverySheetService;
 import com.juiceplatform.service.OrderFreezeService;
 import com.juiceplatform.service.OrderGenerationService;
 import com.juiceplatform.service.SubscriptionActivationService;
@@ -50,6 +52,7 @@ public class DevAuthController {
     private final OrderGenerationService orderGenerationService;
     private final SubscriptionActivationService subscriptionActivationService;
     private final OrderFreezeService orderFreezeService;
+    private final DeliverySheetService deliverySheetService;
 
     @Value("${jwt.refresh-token-expiry-days:30}")
     private long refreshTokenExpiryDays;
@@ -109,6 +112,15 @@ public class DevAuthController {
     public ResponseEntity<ApiResponse<OrderFreezeService.FreezeResult>> triggerOrderFreeze() {
         java.time.LocalDate deliveryDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusDays(1);
         OrderFreezeService.FreezeResult result = orderFreezeService.freezeOrdersForDate(deliveryDate);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/delivery-sheet/generate")
+    public ResponseEntity<ApiResponse<com.juiceplatform.dto.deliverysheet.DeliverySheetResponse>> triggerDeliverySheetGeneration() {
+        java.time.LocalDate deliveryDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusDays(1);
+        com.juiceplatform.dto.deliverysheet.DeliverySheetResponse result =
+                deliverySheetService.generateSnapshot(deliveryDate,
+                        DeliverySheetSnapshot.GeneratedBySource.SCHEDULER, null);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
