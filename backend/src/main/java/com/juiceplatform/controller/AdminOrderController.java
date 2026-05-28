@@ -4,12 +4,16 @@ import com.juiceplatform.dto.common.ApiResponse;
 import com.juiceplatform.dto.delivery.MarkDeliveredResponse;
 import com.juiceplatform.dto.delivery.MarkSkippedRequest;
 import com.juiceplatform.dto.delivery.MarkSkippedResponse;
+import com.juiceplatform.dto.delivery.OrderCorrectionRequest;
+import com.juiceplatform.dto.delivery.OrderCorrectionResponse;
 import com.juiceplatform.security.AuthenticatedUser;
 import com.juiceplatform.service.DeliveryService;
+import com.juiceplatform.service.OrderCorrectionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +28,7 @@ import java.util.UUID;
 public class AdminOrderController {
 
     private final DeliveryService deliveryService;
+    private final OrderCorrectionService orderCorrectionService;
 
     @PostMapping("/{id}/deliver")
     public ResponseEntity<ApiResponse<MarkDeliveredResponse>> markDelivered(
@@ -43,6 +48,18 @@ public class AdminOrderController {
 
         MarkSkippedResponse response = deliveryService.markSkipped(
                 id, request.getSkipReason(), authenticatedUser.getUserId());
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<ApiResponse<OrderCorrectionResponse>> correctOrder(
+            @PathVariable UUID id,
+            @RequestBody @Valid OrderCorrectionRequest request,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
+
+        OrderCorrectionResponse response = orderCorrectionService.correctOrder(
+                id, request, authenticatedUser.getUserId());
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }

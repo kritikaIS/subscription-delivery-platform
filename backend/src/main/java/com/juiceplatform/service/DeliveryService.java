@@ -55,7 +55,7 @@ public class DeliveryService {
                     .orElseThrow(() -> new BusinessException("RESOURCE_NOT_FOUND",
                             "Delivery record not found for order: " + orderId, HttpStatus.NOT_FOUND));
 
-            long currentBalance = walletLedgerRepository.findLatestByCustomerId(order.getCustomerId())
+            long currentBalance = walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(order.getCustomerId())
                     .map(WalletLedger::getRunningBalancePaise)
                     .orElse(0L);
 
@@ -75,7 +75,7 @@ public class DeliveryService {
         }
 
         // Check wallet balance (BR-DEL-04 — insufficient balance is an unexpected inconsistency)
-        long currentBalance = walletLedgerRepository.findLatestByCustomerId(order.getCustomerId())
+        long currentBalance = walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(order.getCustomerId())
                 .map(WalletLedger::getRunningBalancePaise)
                 .orElse(0L);
 

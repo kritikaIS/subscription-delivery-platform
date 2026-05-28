@@ -1,0 +1,28 @@
+name: Backend CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          JWT_SECRET: ci-test-secret-key-that-is-at-least-32-chars
+          GOOGLE_CLIENT_ID: ci-test-google-client-id
+        run: mvn test --batch-mode --no-transfer-progress

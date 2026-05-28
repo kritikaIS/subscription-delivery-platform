@@ -102,7 +102,7 @@ public class WalletServiceImpl implements WalletService {
     public long getCurrentBalance(UUID customerId) {
         // Balance = running_balance_paise of the latest ledger row (BR-WAL-02)
         // Customers with no entries have balance = 0 (BR-WAL-13)
-        return walletLedgerRepository.findLatestByCustomerId(customerId)
+        return walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(customerId)
                 .map(WalletLedger::getRunningBalancePaise)
                 .orElse(0L);
     }

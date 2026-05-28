@@ -81,7 +81,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Page<Subscription> page;
 
         if (status != null && !status.isBlank()) {
-            Subscription.SubscriptionStatus statusEnum = Subscription.SubscriptionStatus.valueOf(status.toUpperCase());
+            Subscription.SubscriptionStatus statusEnum;
+            try {
+                statusEnum = Subscription.SubscriptionStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("INVALID_STATUS",
+                        "Invalid subscription status: " + status, HttpStatus.BAD_REQUEST);
+            }
             page = subscriptionRepository.findByCustomerIdAndStatus(customerId, statusEnum, pageable);
         } else {
             page = subscriptionRepository.findByCustomerId(customerId, pageable);
