@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: juice-platform-db
+    environment:
+      POSTGRES_DB: juice_platform
+      POSTGRES_USER: juice_user
+      POSTGRES_PASSWORD: juice_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - juice_pg_data:/var/lib/postgresql/data
+
+volumes:
+  juice_pg_data:
