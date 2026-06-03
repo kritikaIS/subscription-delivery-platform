@@ -63,4 +63,16 @@ public class AdminOrderController {
 
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    @PatchMapping("/{id}/override")
+    public ResponseEntity<ApiResponse<OrderCorrectionResponse>> overrideOrder(
+            @PathVariable("id") UUID orderId,
+            @Valid @RequestBody com.juiceplatform.dto.delivery.AdminOrderOverrideRequest request,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedAdmin) {
+        
+        OrderCorrectionResponse response = orderCorrectionService.overrideOrder(
+                orderId, request, authenticatedAdmin.getUserId());
+                
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }
