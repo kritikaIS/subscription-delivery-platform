@@ -73,6 +73,13 @@ public class OrderGenerationService {
         int ordersCreated = 0;
         int duplicatesSkipped = 0;
 
+        // NEW: In-memory tracker for the wallet bypass fix
+        java.util.Map<java.util.UUID, Long> projectedBalances = new java.util.HashMap<>();
+        
+        // NEW: Trackers to prevent notification spam
+        java.util.Set<java.util.UUID> notifiedLowBalance = new java.util.HashSet<>();
+        java.util.Set<java.util.UUID> notifiedBlocked = new java.util.HashSet<>();
+
         try {
             for (Subscription subscription : activeSubscriptions) {
                 // Apply any APPROVED change requests effective on or before deliveryDate (BR-SUB-10/11)
@@ -106,26 +113,38 @@ public class OrderGenerationService {
 
                 long orderCost = product.getPricePerUnitPaise() * subscription.getQuantity();
 
-                // Wallet balance check (BR-WAL-10 / BR-ORD-05)
-                long walletBalance = walletLedgerRepository
-                        .findTopByCustomerIdOrderByCreatedAtDesc(subscription.getCustomerId())
-                        .map(WalletLedger::getRunningBalancePaise)
-                        .orElse(0L);
+                // 1. Fetch from projected memory FIRST, fallback to DB if not present
+                long currentProjectedBalance = projectedBalances.computeIfAbsent(
+                        subscription.getCustomerId(),
+                        cid -> walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(cid)
+                                .map(WalletLedger::getRunningBalancePaise)
+                                .orElse(0L)
+                );
 
-                if (walletBalance < orderCost) {
+                // 2. Wallet balance check using projected balance (BR-WAL-10 / BR-ORD-05)
+                if (currentProjectedBalance < orderCost) {
                     log.warn("Skipping subscription {} — insufficient wallet balance ({} < {})",
-                            subscription.getId(), walletBalance, orderCost);
-                    // Notify customer and admin — best-effort, after transaction (BR-NOT-01, BR-NOT-02, BR-NOT-03)
-                    notificationService.notifyOrderGenerationBlocked(
-                            subscription.getCustomerId(), "Customer", walletBalance, orderCost);
-                    continue;
+                            subscription.getId(), currentProjectedBalance, orderCost);
+                    
+                    // THE FIX: Only notify once per customer for blocked orders
+                    if (!notifiedBlocked.contains(subscription.getCustomerId())) {
+                        notificationService.notifyOrderGenerationBlocked(
+                                subscription.getCustomerId(), "Customer", currentProjectedBalance, orderCost);
+                        notifiedBlocked.add(subscription.getCustomerId());
+                    }
+                    continue; // Skip order generation
                 }
 
-                // Low balance warning check (BR-WAL-09): balance < ₹200 = 20,000 paise
-                if (walletBalance < 20_000L) {
+                // 3. Low balance warning check (BR-WAL-09)
+                // THE FIX: Only notify once per customer for low balance
+                if (currentProjectedBalance < 20_000L && !notifiedLowBalance.contains(subscription.getCustomerId())) {
                     notificationService.notifyLowBalance(
-                            subscription.getCustomerId(), "Customer", walletBalance, 20_000L);
+                            subscription.getCustomerId(), "Customer", currentProjectedBalance, 20_000L);
+                    notifiedLowBalance.add(subscription.getCustomerId());
                 }
+
+                // 4. THE FIX: Deduct from projected balance so subsequent subscriptions see the reduced amount
+                projectedBalances.put(subscription.getCustomerId(), currentProjectedBalance - orderCost);
 
                 // Create order with snapshots
                 Order order = new Order();
