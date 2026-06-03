@@ -28,4 +28,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findBySubscriptionIdAndStatusAndDeliveryDateGreaterThanEqual(
             UUID subscriptionId, Order.OrderStatus status, LocalDate fromDate);
+
+    // Admin: filter by date range
+    Page<Order> findByDeliveryDateBetween(LocalDate startDate, LocalDate endDate, Pageable pageable);
 }
+

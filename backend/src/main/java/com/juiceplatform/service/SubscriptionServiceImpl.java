@@ -1,5 +1,6 @@
 package com.juiceplatform.service;
 
+import com.juiceplatform.dto.subscription.AdminSubscriptionResponse;
 import com.juiceplatform.dto.subscription.CancelSubscriptionResponse;
 import com.juiceplatform.dto.subscription.ChangeProductRequest;
 import com.juiceplatform.dto.subscription.ChangeQuantityRequest;
@@ -484,5 +485,41 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new BusinessException("SUBSCRIPTION_NOT_MODIFIABLE",
                     "Changes are not allowed before subscription activation", HttpStatus.CONFLICT);
         }
+    }
+
+    /**
+     * Admin: returns all subscriptions across all customers.
+     * Batch-loads related users and products to avoid N+1 queries.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AdminSubscriptionResponse> getAllSubscriptions(Pageable pageable) {
+        Page<Subscription> page = subscriptionRepository.findAll(pageable);
+        List<Subscription> subs = page.getContent();
+
+        java.util.Set<UUID> customerIds = subs.stream().map(Subscription::getCustomerId).collect(java.util.stream.Collectors.toSet());
+        java.util.Set<UUID> productIds = subs.stream().map(Subscription::getProductId).collect(java.util.stream.Collectors.toSet());
+
+        java.util.Map<UUID, User> userMap = userRepository.findAllById(customerIds).stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+        java.util.Map<UUID, Product> productMap = productRepository.findAllById(productIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Product::getId, p -> p));
+
+        return page.map(sub -> {
+            User customer = userMap.get(sub.getCustomerId());
+            Product product = productMap.get(sub.getProductId());
+            return AdminSubscriptionResponse.builder()
+                    .id(sub.getId())
+                    .customerId(sub.getCustomerId())
+                    .customerName(customer != null ? customer.getName() : "Unknown")
+                    .productId(sub.getProductId())
+                    .productName(product != null ? product.getName() : "Unknown")
+                    .quantity(sub.getQuantity())
+                    .status(sub.getStatus().name())
+                    .pauseReason(sub.getPauseReason() != null ? sub.getPauseReason().name() : null)
+                    .startDate(sub.getStartDate())
+                    .createdAt(sub.getCreatedAt())
+                    .build();
+        });
     }
 }

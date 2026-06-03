@@ -1,5 +1,6 @@
 package com.juiceplatform.service;
 
+import com.juiceplatform.dto.subscription.AdminSubscriptionResponse;
 import com.juiceplatform.dto.subscription.CancelSubscriptionResponse;
 import com.juiceplatform.dto.subscription.ChangeProductRequest;
 import com.juiceplatform.dto.subscription.ChangeQuantityRequest;
@@ -11,6 +12,7 @@ import com.juiceplatform.dto.subscription.QuantityChangeResponse;
 import com.juiceplatform.dto.subscription.ResumeSubscriptionResponse;
 import com.juiceplatform.dto.subscription.SubscriptionDetailResponse;
 import com.juiceplatform.dto.subscription.SubscriptionResponse;
+import com.juiceplatform.entity.Subscription;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -36,4 +38,8 @@ public interface SubscriptionService {
 
     Page<ChangeRequestListEntry> listChangeRequests(UUID customerId, UUID subscriptionId,
                                                     String type, String status, Pageable pageable);
+
+    // Admin read methods
+    Page<AdminSubscriptionResponse> getAllSubscriptions(Pageable pageable);
 }
+
