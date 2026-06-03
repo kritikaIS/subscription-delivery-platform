@@ -57,7 +57,7 @@ public class OrderGenerationService {
             return new OrderGenerationResult(deliveryDate, 0, 0, 0);
         }
 
-        // Acquire scheduler_job_log entry — rejects concurrent RUNNING, allows rerun of COMPLETED/FAILED
+        // Acquire scheduler_job_log entry
         SchedulerJobLog jobLog = acquireJobLog(deliveryDate);
         if (jobLog == null) {
             log.warn("OrderGenerationJob rejected for {} — another instance is RUNNING", deliveryDate);
@@ -66,48 +66,36 @@ public class OrderGenerationService {
 
         log.info("Starting order generation for delivery date: {}", deliveryDate);
 
-        // Find all ACTIVE subscriptions (BR-ORD-02)
         List<Subscription> activeSubscriptions = subscriptionRepository
                 .findAllByStatus(Subscription.SubscriptionStatus.ACTIVE);
 
         int ordersCreated = 0;
         int duplicatesSkipped = 0;
 
-        // NEW: In-memory tracker for the wallet bypass fix
+        // --- NEW: In-memory trackers to fix Multi-Subscription Wallet Bypass & Notification Spam ---
         java.util.Map<java.util.UUID, Long> projectedBalances = new java.util.HashMap<>();
-        
-        // NEW: Trackers to prevent notification spam
         java.util.Set<java.util.UUID> notifiedLowBalance = new java.util.HashSet<>();
         java.util.Set<java.util.UUID> notifiedBlocked = new java.util.HashSet<>();
 
         try {
             for (Subscription subscription : activeSubscriptions) {
-                // Apply any APPROVED change requests effective on or before deliveryDate (BR-SUB-10/11)
                 applyChangeRequests(subscription, deliveryDate);
 
-                // Build idempotency key: sub_<id>_<YYYY-MM-DD> (BR-ORD-04)
                 String idempotencyKey = "sub_" + subscription.getId() + "_" + deliveryDate;
 
-                // Check for duplicate (idempotency)
                 if (orderRepository.existsByIdempotencyKey(idempotencyKey)) {
                     duplicatesSkipped++;
                     continue;
                 }
 
-                // Load product for price snapshot (BR-ORD-06)
                 Product product = productRepository.findById(subscription.getProductId()).orElse(null);
                 if (product == null || !product.getIsAvailable()) {
-                    log.warn("Skipping subscription {} — product {} unavailable",
-                            subscription.getId(), subscription.getProductId());
                     continue;
                 }
 
-                // Load customer address for snapshot (BR-ONB-04)
                 DeliveryAddress address = deliveryAddressRepository
                         .findByCustomerId(subscription.getCustomerId()).orElse(null);
                 if (address == null) {
-                    log.warn("Skipping subscription {} — no delivery address for customer {}",
-                            subscription.getId(), subscription.getCustomerId());
                     continue;
                 }
 
@@ -126,7 +114,7 @@ public class OrderGenerationService {
                     log.warn("Skipping subscription {} — insufficient wallet balance ({} < {})",
                             subscription.getId(), currentProjectedBalance, orderCost);
                     
-                    // THE FIX: Only notify once per customer for blocked orders
+                    // Only notify once per customer for blocked orders
                     if (!notifiedBlocked.contains(subscription.getCustomerId())) {
                         notificationService.notifyOrderGenerationBlocked(
                                 subscription.getCustomerId(), "Customer", currentProjectedBalance, orderCost);
@@ -136,7 +124,7 @@ public class OrderGenerationService {
                 }
 
                 // 3. Low balance warning check (BR-WAL-09)
-                // THE FIX: Only notify once per customer for low balance
+                // Only notify once per customer for low balance
                 if (currentProjectedBalance < 20_000L && !notifiedLowBalance.contains(subscription.getCustomerId())) {
                     notificationService.notifyLowBalance(
                             subscription.getCustomerId(), "Customer", currentProjectedBalance, 20_000L);
@@ -168,23 +156,16 @@ public class OrderGenerationService {
                 ordersCreated++;
             }
 
-            // Mark job COMPLETED
             jobLog.setStatus(SchedulerJobLog.JobStatus.COMPLETED);
             jobLog.setFinishedAt(OffsetDateTime.now(IST));
             jobLog.setRowsProcessed(ordersCreated);
             schedulerJobLogRepository.save(jobLog);
 
-            log.info("Order generation complete for {}: {} active subscriptions processed, {} orders created, {} duplicates skipped",
-                    deliveryDate, activeSubscriptions.size(), ordersCreated, duplicatesSkipped);
-
         } catch (Exception e) {
-            // Mark job FAILED
             jobLog.setStatus(SchedulerJobLog.JobStatus.FAILED);
             jobLog.setFinishedAt(OffsetDateTime.now(IST));
             jobLog.setErrorMessage(e.getMessage());
             schedulerJobLogRepository.save(jobLog);
-
-            log.error("OrderGenerationJob failed for {}: {}", deliveryDate, e.getMessage(), e);
             throw e;
         }
 
