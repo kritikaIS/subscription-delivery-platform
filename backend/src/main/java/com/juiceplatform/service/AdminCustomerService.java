@@ -25,6 +25,7 @@ public class AdminCustomerService {
 
     private final UserRepository userRepository;
     private final WalletLedgerRepository walletLedgerRepository;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public Page<AdminCustomerResponse> getAllCustomers(Pageable pageable) {
@@ -41,6 +42,56 @@ public class AdminCustomerService {
 
         return mapToDto(user, fetchBalance(customerId));
     }
+
+    // --- Write Methods ---
+
+    @Transactional
+    public AdminCustomerResponse deactivateCustomer(UUID customerId, String reason, UUID adminId) {
+        User user = userRepository.findById(customerId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
+                        "Customer not found", HttpStatus.NOT_FOUND));
+
+        if (!user.getIsActive()) {
+            throw new BusinessException("ALREADY_DEACTIVATED",
+                    "Customer is already deactivated", HttpStatus.BAD_REQUEST);
+        }
+
+        user.setIsActive(false);
+        userRepository.save(user);
+
+        // BR-AUD-01: Log the mutation
+        auditLogService.log("CUSTOMER_DEACTIVATION", "customer", customerId.toString(),
+                java.util.Map.of("isActive", true),
+                java.util.Map.of("isActive", false),
+                adminId, reason);
+
+        return mapToDto(user, fetchBalance(customerId));
+    }
+
+    @Transactional
+    public AdminCustomerResponse reactivateCustomer(UUID customerId, String reason, UUID adminId) {
+        User user = userRepository.findById(customerId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
+                        "Customer not found", HttpStatus.NOT_FOUND));
+
+        if (user.getIsActive()) {
+            throw new BusinessException("ALREADY_ACTIVE",
+                    "Customer is already active", HttpStatus.BAD_REQUEST);
+        }
+
+        user.setIsActive(true);
+        userRepository.save(user);
+
+        // BR-AUD-01: Log the mutation
+        auditLogService.log("CUSTOMER_REACTIVATION", "customer", customerId.toString(),
+                java.util.Map.of("isActive", false),
+                java.util.Map.of("isActive", true),
+                adminId, reason);
+
+        return mapToDto(user, fetchBalance(customerId));
+    }
+
+    // --- Private Helpers ---
 
     private long fetchBalance(UUID customerId) {
         return walletLedgerRepository.findTopByCustomerIdOrderByCreatedAtDesc(customerId)
@@ -61,3 +112,4 @@ public class AdminCustomerService {
                 .build();
     }
 }
+
