@@ -417,10 +417,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new BusinessException("ACCOUNT_DEACTIVATED",
                     "Account is deactivated", HttpStatus.FORBIDDEN);
         }
-        if (!customer.getOnboardingCompleted()) {
-            throw new BusinessException("ONBOARDING_INCOMPLETE",
-                    "Customer has not completed onboarding", HttpStatus.FORBIDDEN);
-        }
         return customer;
     }
 

@@ -84,10 +84,6 @@ public class CustomerServiceImpl implements CustomerService {
                 .orElseThrow(() -> new BusinessException("RESOURCE_NOT_FOUND",
                         "Customer not found", HttpStatus.NOT_FOUND));
 
-        if (!customer.getOnboardingCompleted()) {
-            throw new BusinessException("ONBOARDING_INCOMPLETE",
-                    "Complete onboarding before updating your address", HttpStatus.FORBIDDEN);
-        }
 
         // Fetch existing address — must exist after onboarding is complete
         DeliveryAddress address = deliveryAddressRepository.findByCustomerId(customerId)

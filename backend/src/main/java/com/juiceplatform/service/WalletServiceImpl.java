@@ -57,7 +57,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public AdminCreditResponse creditWallet(UUID customerId, AdminCreditRequest request, UUID adminId) {
-        userRepository.findById(customerId)
+        User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new BusinessException("RESOURCE_NOT_FOUND",
                         "Customer not found: " + customerId, HttpStatus.NOT_FOUND));
 
@@ -88,8 +88,7 @@ public class WalletServiceImpl implements WalletService {
                         "ledgerEntryId", entry.getId().toString()),
                 adminId, request.getNotes());
 
-        // Parameter order matches: (UUID customerId, String ledgerEntryId, long amountPaise, long newBalancePaise)
-        notificationService.notifyWalletCredited(customerId, entry.getId().toString(), request.getAmountPaise(), newBalance);
+        notificationService.notifyWalletCredited(customerId, customer.getName(), request.getAmountPaise(), newBalance);
 
         return AdminCreditResponse.builder()
                 .ledgerEntryId(entry.getId())
